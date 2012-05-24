@@ -181,12 +181,111 @@ namespace tpool {
 
 <section class="slide" id="elements-videos">
 	<h2>Implementation: TaskQueue</h2>
-	<pre><code>&lt;iframe src=&quot;http://player.vimeo.com/video/1063136?title=0&amp;amp;byline=0&amp;amp;portrait=0&quot; width=&quot;400&quot; height=&quot;225&quot; frameborder=&quot;0&quot;&gt;&lt;/iframe&gt;</code></pre>
+	<h3>Several algorithm to Implement TaskQueue</h3>
+	<ol>
+	  <li class="slide">Single Lock: 
+the most popular and most inefficient.</li>
+	  <li class="slide">Double Lock: more efficient</li>
+	  <li class="slide">Non blocking: most efficient, but hardest to
+	  Implement.</li>
+	</ol>
+	<h3 class="slide">TaskQueue in Tpool uses single lock.</h3>
+	<pre class="slide">
+	  <code>
+void LinearTaskQueue::Push(TaskBase::Ptr task)
+{
+  ConditionNotifyAllLocker l(m_mutexCond,
+			     bind(&amp;TaskQueueImpl::empty, &amp;m_tasks));
+  m_tasks.push(task);
+}
+
+TaskBase::Ptr LinearTaskQueue::Pop()
+{
+  // wait until task queue is not empty
+  ConditionWaitLocker l(m_mutexCond,
+			bind(&amp;TaskQueueImpl::empty, &amp;m_tasks));
+ 
+  TaskBase::Ptr task = m_tasks.front();
+  m_tasks.pop();
+  return task;
+}
+	  </code>
+	</pre>
 </section>
 
 <section class="slide" id="digging-deeper">
-	<h2>Digging Deeper</h2>
-	<p>If you want to learn about making your own themes, extending deck.js, and more, check out the&nbsp;<a href="../docs/">documentation</a>.</p>
+	<h2>Implementation: WorkerThread</h2>
+	<p>WorkerThread is responsible for executing task stored in
+	TaskQueue.</p>
+	<ol>
+	  <li class="slide">Fetch tasks from TaskQueue and execute them
+	  continuously.</li>
+	  <li class="slide">Life cycle management. Canceling</li>
+	</ol>
+	<pre class="slide">
+	  <code>
+  class WorkerThread {
+  private:
+    enum State {
+      INIT,
+      RUNNING,
+      FINISHED,
+    };
+ 
+  public:
+    typedef boost::shared_ptr Ptr;
+ 
+    WorkerThread(TaskQueueBase::Ptr taskQueue);
+    template&lt;typename FinishAction&gt;
+    WorkerThread(TaskQueueBase::Ptr taskQueue, FinishAction action);
+    ~WorkerThread();
+ 
+    void Cancel();
+    void CancelAsync();
+    void CancelNow();
+  };
+	  </code>
+	</pre>
+</section>
+
+<section class="slide" id="workerthread">
+  <h2>Implementation: WorkerThread</h2>
+  <h3>WorkerThread start working upon constructing instead of
+  invoking a "start" function</h3>
+  <pre class="slide">
+    <code>
+  template&lt;typename FinishAction&gt;
+  WorkerThread::WorkerThread(TaskQueueBase::Ptr taskQueue,
+			     FinishAction action)
+  {
+    using boost::bind;
+ 
+    m_taskQueue = taskQueue;
+ 
+    // ensure that the thread is created successfully.
+    while (true)
+      {
+	try
+	  {
+	    // check for the creation exception
+	    m_thread.reset(new Thread(bind(&amp;WorkerThread::
+					   ThreadFunction,
+					   this, action)));
+	    break;
+	  }
+	catch (const std::exception&amp; e)
+	  {
+	    ProcessError(e);
+	  }
+      }
+  }
+    </code>
+  </pre>
+</section>
+
+<section class="slide" id="workerthread2">
+  <h2>Implementation: WorkerThread</h2>
+  
 </section>
 
 <!-- deck.navigation snippet -->
